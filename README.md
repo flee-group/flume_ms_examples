@@ -13,4 +13,5 @@ The `R` directory contains all code. Before running the scenarios you should cre
 Order of operations:
 
 1. `R/run_example.r`
-2. ... 
+2. `R/process_results.r` 
+3. Other scripts can be run in any order
