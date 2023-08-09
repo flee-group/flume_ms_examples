@@ -15,3 +15,17 @@ Order of operations:
 1. `R/run_example.r`
 2. `R/process_results.r` 
 3. Other scripts can be run in any order
+
+
+### Algae N:P Ratio
+
+Directory `ex2_kamp_np_algae`
+
+#### Data description
+File `chemistry.rds` contains the water chemistry data. Variables are:
+
+* SRP (soluble reactive phosphorous) in micrograms/L
+* NH4, NO3: dissolved ammonium and nitrate, in mg/L
+* DIN (dissolved inorganic nitrogen) in mg/L
+
+File `asv.rds` contains abundances of selected (how?) ASVs.
