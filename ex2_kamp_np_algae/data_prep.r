@@ -5,9 +5,15 @@ data(flume_networks)
 kamp = flume_networks$kamp
 kdat = readRDS("ex2_kamp_np_algae/data/kamp_flume.RDS")
 sites = read.csv("ex2_kamp_np_algae/data/kamp_sites.csv")
+
+# remove the original K03 site, replace with K03plus, (ask Thomas why)
+rownames(kdat)[rownames(kdat) == "K03"] = "K03_old"
+rownames(kdat)[rownames(kdat) == "K03plus"] = "K03"
 kdat$name = sub("K0", "K", rownames(kdat))
 kdat = merge(kdat, sites, by = "name")
 
+# change the units to put N and P in the same currency
+kdat$SRP = kdat$SRP/1000
 
 pldat = data.frame(attr(kamp, "layout"))
 pldat$site = attr(kamp ,"names_sites")
@@ -55,10 +61,10 @@ name_mapping = data.frame(
 mg_kamp = merge(name_mapping, kdat, by = "name")
 mg_kamp = merge(mg_kamp, data.frame(node = 1:52, Q = state(kamp, "Q")), by = "node", all.y = TRUE)
 
-# take the mean of duplicated columns
+# take the mean of duplicated rows
 mg_kamp = data.table(mg_kamp)
 mg_kamp$name = NULL
-mg_kamp = mg_kamp[, lapply(.SD, mean), .(node)]
+mg_kamp = mg_kamp[, lapply(.SD, mean, na.rm = TRUE), .(node)]
 mg_kamp = as.data.frame(mg_kamp)
 
 # interpolate to missing nodes
@@ -91,8 +97,8 @@ j = c(match(c("SRP", "NH4", "NO3", "DIN"), colnames(mg_kamp)),
 ## 5. unknowns at the edge of the network (headwaters, the outlet) get a copy of the nearest known
 
 mg_kamp[1:2, j] = mg_kamp[3, j] # nodes 1 and 2 are ds of 3, so just copy state
-mg_kamp[4, j] = wtmean(mg_kamp, c(5, 25), j)
 mg_kamp[25, j] = mg_kamp[27, j] 
+mg_kamp[4, j] = wtmean(mg_kamp, c(5, 25), j)
 mg_kamp[11:12, j] = mg_kamp[10, j]
 mg_kamp[13, j] = wtmean(mg_kamp, c(14, 15), j)
 mg_kamp[24, j] = mg_kamp[13, j] 
@@ -107,9 +113,29 @@ mg_kamp[46, j] = mg_kamp[45, j]
 mg_kamp[49, j] = mg_kamp[48, j] 
 
 
-# change the units to put N and P in the same currency
+# compute niches by ASV
+ntop = kdat$DIN / kdat$SRP
+j = grep("ASV", colnames(kdat))
+asv = kdat[,j]
+ntop_mean = sapply(asv, \(x) weighted.mean(ntop, x))
+ntop_sd = mapply(\(x, mu, wt) {
+	wt = wt/sum(wt)
+	sqrt(sum((wt * (x - mu)^2 )))
+	}, 
+	wt = asv, mu = ntop_mean, MoreArgs = list(x = ntop), SIMPLIFY = TRUE)
+# total niche height modified by the total abundance for each asv, with the most abundant species
+# normalized to twice the default
+niche_scale = 2 * (colSums(asv) / max(colSums(asv)))
 
-# set up metacommunity and compute niches
+
+# set up metacommunity
+n_args = list(location = ntop_mean, breadth = ntop_sd, 
+	scale_c = 6e-6 * niche_scale, scale_e = 1.25e-7 * niche_scale, r_use = 5e-4, 
+	ratio = matrix(1:2, ncol=2))
+d_args = list(alpha = 0.05, beta = 0.1)
+mc = metacommunity(nsp = length(ntop_mean), nr = 2, niches = niches_custom, dispersal = dispersal_custom,
+	sp_names = colnames(asv), r_names = c("N", "P"), niche_args = n_args, 
+	dispersal_args = d_args)
 
 # set up the river network with chemistry & community starting state
 
