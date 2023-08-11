@@ -22,6 +22,9 @@ Order of operations:
 Directory `ex2_kamp_np_algae`
 
 #### Data description
+
+Samples from the site K03 were dropped, site K03plus was renamed to K03 (Site was moved after initial sampling to K03 plus location).
+
 File `chemistry.rds` contains the water chemistry data. Variables are:
 
 * SRP (soluble reactive phosphorous) in micrograms/L
