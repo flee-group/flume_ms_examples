@@ -135,10 +135,57 @@ n_args = list(location = ntop_mean, breadth = ntop_sd,
 d_args = list(alpha = 0.05, beta = 0.1)
 mc = metacommunity(nsp = length(ntop_mean), nr = 2, niches = niches_custom, dispersal = dispersal_custom,
 	sp_names = colnames(asv), r_names = c("N", "P"), niche_args = n_args, 
-	dispersal_args = d_args)
+	dispersal_args = d_args, comp_scale = 1e-4)
 
 # set up the river network with chemistry & community starting state
+r0 = as.matrix(mg_kamp[, c('SRP', "DIN")])
+sp0 = as.matrix(mg_kamp[, grep("ASV", colnames(kdat))])
+sp0[sp0 > 0] = 1
+
+# try adding boundary conditions to keep species from extinction. It assumes that dispersal from outside the network
+# is equal to 1/4 of a site, for each site, using both active and passive dispersal
+# this is useful, might make sense to put into package
+qmat = matrix(boundary(kamp, "Q"), 
+	nrow = length(kamp), 
+	ncol = attr(mc, "n_species"))
+bflux = sweep(qmat, 2, dispersal_params(mc)$beta, `*`)
+bflux[bflux < 0] = 0
+bnd_sp = 0.25 * sweep(bflux, 2, dispersal_params(mc)$alpha, `+`)
+
+
 
 # set up the model
+mod = flume(mc, kamp, sp0, r0, spb = bnd_sp)
+
+# test
+res = run_simulation(mod, 120, reps = 1)
+plot(res)
+
+## notes after an initial run
+# result - everything is a bit too cold. need to tweak to make it move faster.
+## Need to explore a bit (see what the e function, c function, and dispersal rates look like) to see what to tweak
+network = mod[["networks"]][[1]]
+comm = mod[["metacom"]]
+R = state(network, "resources")
+S = state(network, "species")
+col_prob(comm, network, dt = mod$dt)
+ext_prob(comm, network, dt = mod$dt)
+# col rates seem a little low for most species, and e rates are too high. The last 2 in particular
+# have very low c rates
+
+
+## explore colonisation (by niche and dispersal portions)
+## dispersal totally overwhelms niche-based col (maybe this is ok)
+## anyway col probs seems reasonable
+col_prob(comm, network, dt = mod$dt, components = TRUE)
+
+
+## explore extinction
+## competition an order of magnitude more important; perhaps this is too much
+## also remember that extinction is additive, while colonisation is multiplicative
+ext_prob(comm, network, dt = mod$dt, components = TRUE)
+
+
+
 
 # save everything
