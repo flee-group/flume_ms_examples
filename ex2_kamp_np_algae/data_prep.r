@@ -160,9 +160,13 @@ mod = flume(mc, kamp, sp0, r0, spb = bnd_sp)
 # test
 res = run_simulation(mod, 120, reps = 1)
 plot(res)
+plot(res, "ef")
 
 ## notes after an initial run
 # result - everything is a bit too cold. need to tweak to make it move faster.
+# N consumption pretty low relative to P, probably the opposite of what it should be
+# N is also more or less perfectly stable
+# occupancy gradually declines for all species, and they are in general way too stable
 ## Need to explore a bit (see what the e function, c function, and dispersal rates look like) to see what to tweak
 network = mod[["networks"]][[1]]
 comm = mod[["metacom"]]
@@ -170,19 +174,11 @@ R = state(network, "resources")
 S = state(network, "species")
 col_prob(comm, network, dt = mod$dt)
 ext_prob(comm, network, dt = mod$dt)
-# col rates seem a little low for most species, and e rates are too high. The last 2 in particular
-# have very low c rates
-
 
 ## explore colonisation (by niche and dispersal portions)
-## dispersal totally overwhelms niche-based col (maybe this is ok)
-## anyway col probs seems reasonable
 col_prob(comm, network, dt = mod$dt, components = TRUE)
 
-
 ## explore extinction
-## competition an order of magnitude more important; perhaps this is too much
-## also remember that extinction is additive, while colonisation is multiplicative
 ext_prob(comm, network, dt = mod$dt, components = TRUE)
 
 
