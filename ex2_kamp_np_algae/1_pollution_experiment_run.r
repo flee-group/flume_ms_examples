@@ -77,6 +77,8 @@ model_settings = list(
 
 saveRDS(model_settings, "model_settings.rds")
 
+j = 1
+maxj = length(pnodes) * length(poll_discharges) * length(poll_concentrations)
 for(p_node in pnodes) {
 	pn_name = paste0("n", p_node)
 	p_ds = dsnodes[[pn_name]]
@@ -84,7 +86,7 @@ for(p_node in pnodes) {
 		for(p_conc in poll_concentrations) {
 			fname = paste0("poll_conc", p_conc, "_Q", p_discharge*1000, "_", 
 				pn_name, ".rds")
-			cat("Starting", fname, "\n")
+			cat(j, "of", maxj, "-", fname, "\n")
 			# run first phase with no pollution
 			res_pol = run_simulation(mod, phase1_len, reps = reps)
 
@@ -101,6 +103,7 @@ for(p_node in pnodes) {
 
 			fpath = file.path(outdir, fname)
 			saveRDS(res_pol, fpath)
+			j = j+1
 		}
 	}
 }
