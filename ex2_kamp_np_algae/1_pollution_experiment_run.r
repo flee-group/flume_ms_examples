@@ -56,13 +56,6 @@ mod = flume(mc, kamp, algae$sp0, algae$r0, spb = bnd_sp)
 
 ## simple experiment: try pollution next to control to see if there is any effect
 
-
-
-
-
-
-
-
 # note march 19:
 # trying a run with only the most extreme to see if we can even create an effect
 
