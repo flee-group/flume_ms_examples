@@ -29,9 +29,10 @@ process_results = function(f) {
 	res
 }
 
-sim_results = rbindlist(parallell:mclapply(res_files, process_results, mc.cores = 8))
+sim_results = rbindlist(parallel::mclapply(res_files, process_results, mc.cores = 8))
 
 ## first figure: compare mean species richness in polluted nodes at different pollution discharge and concentration
+
 fig1_res = sim_results[(is.na(pollution_reach) & reach %in% unique(pollution_reach)) | pollution_reach == reach]
 fig1_res$polluted = !is.na(fig1_res$pollution_reach)
 ggplot(fig1_res, aes(x = concentration, y = richness, color = factor(polluted))) + 
@@ -78,7 +79,7 @@ fig2_res = fig2_res[time_steps == "131:161"]
 fig2_res[, is_pnode := (reach == pollution_reach)]
 
 ggplot(fig2_res, aes(x = xpos, y = richness, colour = as.factor(concentration), pch = is_pnode)) + 
-	geom_point() + geom_line() + 
+	geom_point() + geom_line() + geom_label(aes(label = reach), nudge_x = -0.5, nudge_y = 0.5, size = 3) + 
 	facet_grid(pollution_reach ~ factor(Q))
 
 # the control is identical to pollution treatments
