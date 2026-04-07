@@ -1,12 +1,14 @@
 library(flume)
 library(data.table)
 
-files = list.files("ex_kamp_dispersal_comp/res", full.names = TRUE, pattern = 'rds')
+files = list.files("res", full.names = TRUE, pattern = 'rds')
 ## for all metrics, average over the last 30 time steps
-tsteps = 62:91
+testfile <- readRDS(files[1])
+tl <- length(testfile)
+tsteps <- (tl - 28):(tl + 1)
 
-scenarios = readRDS("ex_kamp_dispersal_comp/scenarios.rds")
-scenarios$id = 1:nrow(scenarios)
+scenarios = readRDS("scenarios.rds")
+scenarios$id = seq_len(nrow(scenarios))
 
 #' Get length of time a flume has been run
 flume_t = function(x) {
@@ -53,5 +55,5 @@ sc_results = data.table::rbindlist(sc_results)
 sc_results = merge(sc_results, scenarios[, .(id, family, gamma, alpha, breadth, sc_e, ru, comp_sc)], 
 	by.x = "scenario", by.y = "id")
 
-dir.create("ex_kamp_dispersal_comp/res_processed", showWarnings = FALSE)
-saveRDS(sc_results, "ex_kamp_dispersal_comp/res_processed/run_summary.rds")
+dir.create("res_processed", showWarnings = FALSE)
+saveRDS(sc_results, "res_processed/run_summary.rds")

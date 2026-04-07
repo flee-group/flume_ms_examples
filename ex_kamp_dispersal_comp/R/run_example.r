@@ -61,7 +61,7 @@ nt = 120 # number of time steps of one simulation
 # generate random species lists for each gamma
 sps = lapply(g_div, \(gam) t(sapply(1:n_reps, \(n) sample(nsp, gam, replace = FALSE))))
 names(sps) = paste("g", g_div, sep = "")
-saveRDS(sps, "ex_kamp_dispersal_comp/splists.rds")
+saveRDS(sps, "splists.rds")
 
 ###
 # competition constant
@@ -70,7 +70,7 @@ comp = c(1/1000, 1/10)
 scenarios = data.table(expand.grid(alpha = alpha, beta = beta, breadth = breadth, sc_e = scale_e,
         sc_c = scale_c, ru = r_use, nsp = nsp, comp_sc = comp, prevalence = prev, nt = nt,
         niter = n_iter, gamma = g_div, splist_number = 1:n_reps, family = "comp_sc"))
-saveRDS(scenarios, "ex_kamp_dispersal_comp/scenarios.rds")
+saveRDS(scenarios, "scenarios.rds")
 
 
 
