@@ -4,6 +4,46 @@ library(ggplot2)
 res_files = list.files("ex2_kamp_np_algae/results")
 data(kamp)
 
+
+
+## Some old code from the sim runs, should check it out
+# river network maps
+# TODO: add an option to reduce the base size of the edge width
+
+# pol_summary = summarise(res_pol, stat = "richness", quantile = 0.5, t_steps = 201:231)
+# pol_summary = pol_summary[, .(richness = mean(richness)), by = .(reach)]
+# npol_summary = summarise(res_nopol, stat = "richness", quantile = 0.5, t_steps = 201:231)
+# npol_summary = npol_summary[, .(richness = mean(richness)), by = .(reach)]
+
+# par(mfrow = c(2,2), mar = c(0,0,0,0), oma = c(0,4,0,0))
+# i = match(attr(res_pol$networks[[1]],"names_sites"), pol_summary$reach)
+# smax = max(c(pol_summary$richness, npol_summary$richness))
+# plot.river_network(res_pol$networks[[1]], attribute = pol_summary$richness[i],
+#                     legend_args = list(title = "richness"), zlim = c(0, smax))
+# mtext("Polluted", side = 2)
+# zmax = max(state(res_pol$networks[[1]], "resources")[,'N'])
+# plot.river_network(res_pol$networks[[1]], attribute = "resource", v_palette = "OrRd", zlim = c(0,zmax), log = TRUE)
+
+# i = match(attr(res_nopol$networks[[1]],"names_sites"), npol_summary$reach)
+# plot.river_network(res_nopol$networks[[1]], attribute = npol_summary$richness[i],
+#                     legend_args = list(title = "richness"), zlim = c(0, smax))
+# mtext("Not Polluted", side = 2)
+# plot.river_network(res_nopol$networks[[1]], attribute = "resource", v_palette = "OrRd", zlim = c(0,zmax), log = TRUE)
+
+
+
+
+# 
+# hist(as.vector(col_prob(mod$metacom, mod$networks[[1]], mod$dt)), main = "Col prob, default")
+# hist(as.vector(ext_prob(mod$metacom, mod$networks[[1]], mod$dt)), main = "Ext prob, default")
+# 
+# hist(as.vector(col_prob(res_pol$metacom, res_pol$networks[[1]], res_pol$dt)), main = "Col prob, polluted")
+# hist(as.vector(ext_prob(res_pol$metacom, res_pol$networks[[1]], res_pol$dt)), main = "Ext prob, polluted")
+# 
+
+
+
+
 parse_fname = function(f) {
 	regex = "poll_conc(\\d+)_Q(\\d+)_n(\\d+)\\.rds"
 	if(f == "no_pollution.rds") {
