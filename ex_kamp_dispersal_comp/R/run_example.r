@@ -41,6 +41,11 @@ start_r[c(42:43, 46, 47:52), ] = 0.1
 start_r[c(9, 13:15, 17:19), ] = 0.7
 start_r[c(38:41, 44:45), ] = 0.3
 
+# save the network with these starting parameters to generate a figure from it later
+net_fig = net
+state(net_fig, "resources") = NULL
+state(net_fig, "resources") = start_r
+saveRDS(net_fig, "ex1_network.rds")
 
 ## gamma diversity scenarios
 ## how many species are possible in each scenario
