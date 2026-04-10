@@ -2,7 +2,12 @@ library(flume)
 library(ggplot2)
 library(data.table)
 
+seed = sum(strtoi(c("0x6E", "0x6F", "0x69", "0x63", "0x65")))
+set.seed(seed)
+
 data(kamp)
+kamp = kamp$network
+
 data(kamp_raw) # for the raw niche params, better customisation than just using the mc in data(kamp)
 options(mc.cores = 4)
 
@@ -20,24 +25,19 @@ saveRDS(mc, "ex2_mc.rds")
 
 # Add boundary conditions to keep species from extinction.
 # It assumes that dispersal from outside the network
-# is equal to 1/4 of a site, for each site, using both active and passive dispersal
+# is equal to 1/8 of a site, for each site, using both active and passive dispersal (formerly 1/4)
 qmat = matrix(boundary(kamp, "Q"),
     nrow = length(kamp),
     ncol = attr(mc, "n_species"))
 bflux = sweep(qmat, 2, dispersal_params(mc)$beta, `*`)
 bflux[bflux < 0] = 0
-# bnd_sp = 0.25 * sweep(bflux, 2, dispersal_params(mc)$alpha, `+`)
-## 19 march, try drastically reducing this
-# bnd_sp = 0 * sweep(bflux, 2, dispersal_params(mc)$alpha, `+`)
-## 30 April try bringing it back, but 1/8 of a site
 bnd_sp = 0.125 * sweep(bflux, 2, dispersal_params(mc)$alpha, `+`)
 
 # set up the model
-mod = flume(mc, kamp, algae$sp0, algae$r0, spb = bnd_sp)
+mod = flume(mc, kamp, state(kamp, "species"), state(kamp, "resources"), spb = bnd_sp)
 
 
 ## simple experiment: try pollution next to control to see if there is any effect
-
 # simulate a point source of pollution by adding a point source of nitrogen
 # EU water quality standards limit 50 mg/L NO3 (which is 11.3 mg/L of N from NO3)
 # limit of sewage discharge into freshwater is 30 mg/L of N
@@ -65,7 +65,7 @@ phase2_len = 130
 reps = 20
 
 outdir = "results"
-dir.create(outdir, showwarnings = FALSE)
+dir.create(outdir, showWarnings = FALSE)
 
 model_settings = list(
     poll_concentrations = poll_concentrations, pnodes = pnodes, p_discharge = p_discharge,
@@ -79,7 +79,6 @@ j = 1
 maxj = length(pnodes) * length(poll_concentrations)
 for(p_node in pnodes) {
     pn_name = paste0("n", p_node)
-    p_ds = dsnodes[[pn_name]]
     for(p_conc in poll_concentrations) {
         fname = paste0("poll_conc", p_conc, "_pnode", pn_name, ".rds")
         cat(j, "of", maxj, "-", fname, "\n")
