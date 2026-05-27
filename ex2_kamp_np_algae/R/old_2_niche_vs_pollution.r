@@ -1,6 +1,7 @@
 library(flume)
 library(ggplot2)
 
+setwd("ex2_kamp_np_algae")
 mc = readRDS("ex2_mc.rds")
 res = readRDS("results/no_pollution_pnoden15.rds")
 
