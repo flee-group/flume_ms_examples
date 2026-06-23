@@ -8,6 +8,20 @@ library(ggplot2)
 jaccard = function(x, ...)
     UseMethod("jaccard", x)
 
+#' Extract an occupancy matrix from a flume model
+#' pull out the site by species matrix for applicable time steps
+#' sum them, then determine occupancy based on exceeding the threshold
+#' 
+#' @param x A flume model
+#' @param tsteps The time steps to analyse
+#' @param thresh The number of time steps a species must be present in order to be consdered part of the community
+site_by_species_occupancy.flume = function(x, tsteps, thresh) {
+    species = lapply(x$networks, \(xx) state(xx, "species", history = TRUE)[tsteps])
+    species = lapply(species, \(xx) Reduce(`+`, xx))
+    species = lapply(species, \(xx) 1 * (xx >= thresh))
+    species
+}
+
 #' Compute jaccard for a single experiment
 #' @param x A flume model
 #' @param output Whether to return a data.table (with quantiles) or a matrix (median only) or a list (all results)
@@ -18,9 +32,7 @@ jaccard.flume = function(x, output = c("data.frame", "matrix", "list"), quantile
                    tsteps = 202:231, thresh = floor(0.25 * (max(tsteps) - min(tsteps)))) {
     output = match.arg(output)
     snames = attr(x$networks[[1]], "names_sites")
-    species = lapply(x$networks, \(xx) state(xx, "species", history = TRUE)[tsteps])
-    species = lapply(species, \(xx) Reduce(`+`, xx))
-    species = lapply(species, \(xx) 1 * (xx >= thresh))
+    species = site_by_species_occupancy.flume(x, tsteps, thresh)
     J = lapply(species, jaccard.matrix)
 
     if(output == "list")
@@ -44,6 +56,41 @@ jaccard.flume = function(x, output = c("data.frame", "matrix", "list"), quantile
     merge(J_dt, Jhi, by = c("reach1", "reach2"))
 }
 
+
+
+#' Compute a single jaccard dissimilarity matrix for multiple flume experiments
+#' @param x A list of flume models
+#' @param tsteps The time steps to analyse
+#' @param thresh The number of time steps a species must be present in order to be consdered part of the community
+jaccard_multi.flume = function(x, tsteps = 202:231, 
+    thresh = floor(0.25 * (max(tsteps) - min(tsteps)))) {
+    # we assume all networks have the same site names
+    snames = attr(x[[1]]$networks[[1]], "names_sites")
+
+    # parse out the model names
+    poll = sub("poll_conc(\\d+)_.+", "\\1", names(x))
+    poll[grepl("no_pollution", poll)] = "0"
+    poll = as.integer(poll)
+    node = as.integer(sub(".+pnoden(\\d+).+", "\\1", names(x)))
+
+    si_by_sp = lapply(x, site_by_species_occupancy.flume, tsteps, thresh)
+
+    # apply row names that reflect experimental parameters, collapse into
+    # a single mega matrix
+    si_by_sp_all = list()
+    for(i in seq_along(si_by_sp)) {
+        mod_name = paste0("p", poll[i], "_n", node[i], "_")
+        for(j in seq_along(si_by_sp[[i]])) {
+            si_names = paste0(mod_name, "r", j, "_s", snames)
+            rownames(si_by_sp[[i]][[j]]) = si_names
+        }
+        si_by_sp_all[[i]] = do.call(rbind, si_by_sp[[i]])
+    }
+    si_by_sp_all = do.call(rbind, si_by_sp_all)
+
+    J = jaccard.matrix(si_by_sp_all)
+}
+
 #' Compute the jaccard index from a site by species matrix
 #' @param x A site-by-species matrix
 jaccard.matrix = function(x) {
@@ -51,6 +98,8 @@ jaccard.matrix = function(x) {
     rich = rowSums(x)
     ra = matrix(rich, nrow=length(rich), ncol=length(rich))
     J = 1 - (site_sim / (ra + t(ra) - site_sim))
+    J[which(is.nan(J))] = 1 # dissimilarity is maximum if a focal site has no species
+    J
 }
 
 res_path = file.path("results")
@@ -60,6 +109,23 @@ poll_conc = sub("no_pollution.+\\.rds", "0", res_files)
 poll_conc = as.integer(sub("poll_conc(\\d+).+\\.rds", "\\1", poll_conc))
 poll_node = as.integer(sub(".+pnoden(\\d+)\\.rds", "\\1", res_files))
 res = lapply(file.path(res_path, res_files), readRDS)
+names(res) = res_files
+
+# lump ALL sites, all replicates into one mega matrix and compute NMDS on this
+# very slow, so we will save this and cache it for re-running later
+jacc_all = jaccard_multi.flume(res)
+# nmds_all = metaMDS(jacc_all, distance = "jaccard", k = 2)
+
+######## START HERE
+
+saveRDS(nmds_all, "ex2_nmds.rds")
+nmds_all = readRDS("ex2_nmds.rds")
+
+# now re-separate the different experiments
+# compute the average and quantiles NMDS coords by site and treatment combo
+
+
+####### OLD STUFF BELOW
 
 jaccard_list = lapply(res, jaccard.flume, "matrix")
 jacc_nmds = lapply(jaccard_list, metaMDS, distance = "jaccard", k = 2)
