@@ -1,8 +1,9 @@
 library(flume)
 library(data.table)
 library(vegan)
-library(ggplot2)
+library(plotrix)
 
+set.seed(17294)
 ### Figure 3: beta diversity
 #' Compute jaccard index
 jaccard = function(x, ...)
@@ -62,8 +63,11 @@ jaccard.flume = function(x, output = c("data.frame", "matrix", "list"), quantile
 #' @param x A list of flume models
 #' @param tsteps The time steps to analyse
 #' @param thresh The number of time steps a species must be present in order to be consdered part of the community
-jaccard_multi.flume = function(x, tsteps = 202:231, 
-    thresh = floor(0.25 * (max(tsteps) - min(tsteps)))) {
+#' @param mean Compute mean jaccard (averaging across replicates)?
+#' @param mean.thresh Number of replicates the sp must be present in to be present if averaging
+jaccard_multi.flume = function(x, tsteps = 202:231,
+    thresh = floor(0.25 * (max(tsteps) - min(tsteps))),
+    mean = FALSE, mean.thresh = 0.25) {
     # we assume all networks have the same site names
     snames = attr(x[[1]]$networks[[1]], "names_sites")
 
@@ -80,11 +84,19 @@ jaccard_multi.flume = function(x, tsteps = 202:231,
     si_by_sp_all = list()
     for(i in seq_along(si_by_sp)) {
         mod_name = paste0("p", poll[i], "_n", node[i], "_")
-        for(j in seq_along(si_by_sp[[i]])) {
-            si_names = paste0(mod_name, "r", j, "_s", snames)
-            rownames(si_by_sp[[i]][[j]]) = si_names
+        if(mean) {
+            si_by_sp_res = Reduce(`+`, si_by_sp[[i]])
+            si_by_sp_res = si_by_sp_res / length(si_by_sp[[i]])
+            si_by_sp_res = 1.0 * (si_by_sp_res > mean.thresh)
+            rownames(si_by_sp_res) = paste0(mod_name, "s", snames)
+        } else {
+            for(j in seq_along(si_by_sp[[i]])) {
+                si_names = paste0(mod_name, "r", j, "_s", snames)
+                rownames(si_by_sp[[i]][[j]]) = si_names
+            }
+            si_by_sp_res = do.call(rbind, si_by_sp[[i]])
         }
-        si_by_sp_all[[i]] = do.call(rbind, si_by_sp[[i]])
+        si_by_sp_all[[i]] = si_by_sp_res
     }
     si_by_sp_all = do.call(rbind, si_by_sp_all)
 
@@ -112,67 +124,190 @@ res = lapply(file.path(res_path, res_files), readRDS)
 names(res) = res_files
 
 # lump ALL sites, all replicates into one mega matrix and compute NMDS on this
-# very slow, so we will save this and cache it for re-running later
-jacc_all = jaccard_multi.flume(res)
-# nmds_all = metaMDS(jacc_all, distance = "jaccard", k = 2)
+# drop the high pollution treatment - many sites have zero richness and this messes
+# with the nmds
+res = res[!grepl("conc60", names(res))]
+jacc_all = jaccard_multi.flume(res, mean = TRUE)
+nmds_all = metaMDS(jacc_all, distance = "jaccard", k = 2)
 
-######## START HERE
-
-saveRDS(nmds_all, "ex2_nmds.rds")
-nmds_all = readRDS("ex2_nmds.rds")
+# only for running the huge matrix with all replicates
+# saveRDS(nmds_all, "ex2_nmds.rds")
+# nmds_all = readRDS("ex2_nmds.rds")
 
 # now re-separate the different experiments
 # compute the average and quantiles NMDS coords by site and treatment combo
+pts = nmds_all$points
+nmds_dt = data.table(nmds1 = pts[,1], nmds2 = pts[,2], label = rownames(jacc_all))
+# pat = "p(\\d+)_n(\\d+)_r(\\d+)_s(\\d+)"
+pat = "p(\\d+)_n(\\d+)_s(\\d+)"
+nmds_dt[, pollution := as.integer(sub(pat, "\\1", label))]
+nmds_dt[, node := as.integer(sub(pat, "\\2", label))]
+nmds_dt[, reach := as.integer(sub(pat, "\\3", label))]
+
+# nmds_dt[, replicate := as.integer(sub(pat, "\\3", label))]
+# nmds_dt[, reach := as.integer(sub(pat, "\\4", label))]
+
+nmds_dt[, pollution_status := "Unpolluted"]
+nmds_dt[reach %in% 13:15 & node == 15, pollution_status := "Polluted"]
+nmds_dt[reach %in% 31:34 & node == 34, pollution_status := "Polluted"]
+nmds_dt[reach %in% 38:41 & node == 41, pollution_status := "Polluted"]
+nmds_dt[reach %in% 5:9 & node == 15, pollution_status := "Diluted1"]
+nmds_dt[reach %in% 25:29 & node == 34, pollution_status := "Diluted1"]
+nmds_dt[reach %in% 25:28 & node == 41, pollution_status := "Diluted1"]
+nmds_dt[reach %in% 1:4, pollution_status := "Diluted2"]
+
+nmds_agg = nmds_dt[, .(nmds1 = mean(nmds1), nmds2 = mean(nmds2),
+        nmds1_lo = quantile(nmds1, 0.1), nmds1_hi = quantile(nmds1, 0.9),
+        nmds2_lo = quantile(nmds2, 0.1), nmds2_hi = quantile(nmds2, 0.9)),
+        .(pollution, node, reach, pollution_status)]
+
+col_npol = "#000044"
+col_pol = "#ff6666"
+col_d1 = "#aa33cc"
+col_d2 = "#5522cc"
+nmds_agg$color = col_npol
+nmds_agg[pollution_status == "Polluted"]$color = col_pol
+nmds_agg[pollution_status == "Diluted1"]$color = col_d1
+nmds_agg[pollution_status == "Diluted2"]$color = col_d2
 
 
-####### OLD STUFF BELOW
+ell_data = nmds_agg[, .(nmds1 = mean(nmds1), nmds2 = mean(nmds2), 
+    a = diff(range(nmds1)), b = diff(range(nmds2)), angle = 0),
+    .(pollution_status, pollution, node, color)]
 
-jaccard_list = lapply(res, jaccard.flume, "matrix")
-jacc_nmds = lapply(jaccard_list, metaMDS, distance = "jaccard", k = 2)
+# some manual tweaking of the ellipses
+
+# reach 15, control, diluted1
+i = 2
+ell_data[i]$a = ell_data[i]$a * 0.7
+ell_data[i]$b = ell_data[i]$b * 0.7
+
+# reach 15, pollution treatment, diluted 1
+i = 14
+ell_data[i]$a = ell_data[i]$a * 0.5
+
+# reach 15, pollution treatment, polluted reaches
+i = 16
+ell_data[i]$b = ell_data[i]$b * 0.57
+ell_data[i]$nmds1 = ell_data[i]$nmds1 - 0.0045 * ell_data[i]$nmds1
+ell_data[i]$nmds2 = ell_data[i]$nmds2 + 0.003 * ell_data[i]$nmds2
 
 
-col_npol = "#0066cc"
-col_pol = "#cc0099"
-col_pol2 = "#9900cc"
-col_pol3 = "#3300cc"
-col15 = col34 = col41 = rep(col_npol, 52)
-col15[13:15] = col_pol
-col15[5:9] = col_pol2
-col15[1:4] = col34[1:4] = col41[1:4] = col_pol3
-col34[31:34] = col_pol
-col34[25:29] = col41[25:29] = col_pol2
-col41[38:41] = col_pol
+# reach 34, control, polluted reaches
+i = 8
+ell_data[i]$a = ell_data[i]$a * 0.3
+ell_data[i]$angle = pi/4
+
+# reach 41, control, diluted 1
+i = 23
+ell_data[i]$a = ell_data[i]$a * 0.8
 
 
-pdf(width=15, height = 20, file = "figures/fig_ex2_beta.pdf")
+# reach 41, pollution treatment, diluted 2
+i = 21
+ell_data[i]$a = ell_data[i]$a * 0.6
+ell_data[i]$angle = -pi/8
 
-par(mfrow = c(3, 2), bty = 'l', cex = 1.5, mar = c(4,4,0,0), oma = c(1, 1, 1, 1))
-    plot(jacc_nmds[[1]]$points[,1], jacc_nmds[[1]]$points[,2], xlab = "", ylab = "NMDS 2", 
-        pch = 16, col = col15)
-    legend("topleft", legend = "Reach 15\nControl", pch = 16, col = "#ffffff", bty='n')
-    plot(jacc_nmds[[4]]$points[,1], jacc_nmds[[4]]$points[,2], xlab = "", ylab = "", 
-        pch = 16, col = col15)
-    legend("topleft", legend = "Reach 15\nPolluted", pch = 16, col = "#ffffff", bty='n')
 
-    plot(jacc_nmds[[2]]$points[,1], jacc_nmds[[2]]$points[,2], xlab = "", ylab = "NMDS 2", 
-        pch = 16, col = col34)
-    legend("topleft", legend = "Reach 34\nControl", pch = 16, col = "#ffffff", bty='n')
-    plot(jacc_nmds[[5]]$points[,1], jacc_nmds[[5]]$points[,2], xlab = "", ylab = "", 
-        pch = 16, col = col34, xlim = c(-0.6, 0.5))
-    legend("topleft", legend = "Reach 34\nPolluted", pch = 16, col = "#ffffff", bty='n')
 
-    plot(jacc_nmds[[3]]$points[,1], jacc_nmds[[3]]$points[,2], xlab = "NMDS 1", ylab = "NMDS 2", 
-        pch = 16, col = col41)
-    legend("topleft", legend = "Reach 41\nControl", pch = 16, col = "#ffffff", bty='n')
-    legend("topright", legend = c("Unpolluted", "Polluted", "Diluted 1", "Diluted 2"), pch = 16, 
-        col = c(col_npol, col_pol, col_pol2, col_pol3))
-    plot(jacc_nmds[[6]]$points[,1], jacc_nmds[[6]]$points[,2], xlab = "NMDS 1", ylab = "", 
-        pch = 16, col = col41)
-    legend("topleft", legend = "Reach 41\nPolluted", pch = 16, col = "#ffffff", bty='n')
+
+
+pdf(width=10, height = 20, file = "figures/fig_ex2_beta.pdf", pointsize = 8)
+
+ellipse.lwd = 4
+labsize = 2
+lab.x = -0.000249
+lab.y = -0.001475
+oma = c(1, 2, 2, 1)
+par(mfrow = c(2, 1), bty = 'l', cex = 1.5, cex.axis = 1.5,
+    mar = c(4,4,0,0), oma = oma, cex.lab = 2)
+xl = range(nmds_agg[node == 15]$nmds1)
+yl = range(nmds_agg[node == 15]$nmds2)
+with(nmds_agg[node == 15 & pollution == 0],
+    plot(nmds1, nmds2, col = color, pch = 16, cex = 2, xlim = xl, ylim = yl, xlab = "", ylab = "")
+)
+with(ell_data[node == 15 & pollution == 0 & pollution_status != "Unpolluted"],
+    draw.ellipse(x = nmds1, y = nmds2, a = a, b = b, angle = angle, border = color, lwd = ellipse.lwd, deg = FALSE)
+)
+text(lab.x, lab.y, "Control", cex = labsize)
+
+with(nmds_agg[node == 15 & pollution == 15],
+    plot(nmds1, nmds2, col = color, pch = 16, cex = 2, xlim = xl, ylim = yl, xlab = "", ylab = "")
+)
+with(ell_data[node == 15 & pollution == 15 & pollution_status != "Unpolluted"],
+    draw.ellipse(x = nmds1, y = nmds2, a = a, b = b, angle = angle, border = color, lwd = ellipse.lwd, deg = FALSE)
+)
+text(lab.x, lab.y, "Polluted", cex = labsize)
+legend("bottomleft", pch = 16, col = c(col_npol, col_pol, col_d1, col_d2),
+    legend = c("Unpolluted", "Pollluted", "Diluted-1", "Diluted-2"), cex = 2, bty = 'n')
+
+mtext("NMDS 1", side = 1, outer = TRUE, cex = 3)
+mtext("NMDS 2", side = 2, outer = TRUE, cex = 3)
+
+dev.off()
+
+
+# make additional sup mat figures for the other two sites
+pdf(width=10, height = 20, file = "figures/fig_ex2_beta_supp34.pdf", pointsize = 8)
+
+# lab.x = -0.000245
+# lab.y = -0.00147
+par(mfrow = c(2, 1), bty = 'l', cex = 1.5, cex.axis = 1.5,
+    mar = c(4,4,0,0), oma = oma, cex.lab = 2)
+xl = range(nmds_agg[node == 34 & pollution_status != "Polluted"]$nmds1)
+yl = range(nmds_agg[node == 34 & pollution_status != "Polluted"]$nmds2)
+with(nmds_agg[node == 34 & pollution == 0],
+    plot(nmds1, nmds2, col = color, pch = 16, cex = 2, xlim = xl, ylim = yl, xlab = "", ylab = "")
+)
+with(ell_data[node == 34 & pollution == 0 & pollution_status != "Unpolluted"],
+    draw.ellipse(x = nmds1, y = nmds2, a = a, b = b, angle = angle, border = color, lwd = ellipse.lwd, deg = FALSE)
+)
+text(lab.x, lab.y, "Control", cex = labsize)
+
+with(nmds_agg[node == 34 & pollution == 15],
+    plot(nmds1, nmds2, col = color, pch = 16, cex = 2, xlim = xl, ylim = yl, xlab = "", ylab = "")
+)
+with(ell_data[node == 34 & pollution == 15 & pollution_status != "Unpolluted"],
+    draw.ellipse(x = nmds1, y = nmds2, a = a, b = b, angle = angle, border = color, lwd = ellipse.lwd, deg = FALSE)
+)
+text(lab.x, lab.y, "Polluted", cex = labsize)
+legend("bottomleft", pch = 16, col = c(col_npol, col_pol, col_d1, col_d2),
+    legend = c("Unpolluted", "Pollluted", "Diluted-1", "Diluted-2"), cex = 2, bty = 'n')
+
+mtext("NMDS 1", side = 1, outer = TRUE, cex = 3)
+mtext("NMDS 2", side = 2, outer = TRUE, cex = 3)
 
 dev.off()
 
 
 
+pdf(width=10, height = 20, file = "figures/fig_ex2_beta_supp41.pdf", pointsize = 8)
 
+lab.x = -0.000255
+lab.y = -0.00147
+par(mfrow = c(2, 1), bty = 'l', cex = 1.5, cex.axis = 1.5,
+    mar = c(4,4,0,0), oma = oma, cex.lab = 2)
+xl = range(nmds_agg[node == 41 & pollution_status != "Polluted"]$nmds1)
+yl = range(nmds_agg[node == 41 & pollution_status != "Polluted"]$nmds2)
+with(nmds_agg[node == 41 & pollution == 0],
+    plot(nmds1, nmds2, col = color, pch = 16, cex = 2, xlim = xl, ylim = yl, xlab = "", ylab = "")
+)
+with(ell_data[node == 41 & pollution == 0 & pollution_status != "Unpolluted"],
+    draw.ellipse(x = nmds1, y = nmds2, a = a, b = b, angle = angle, border = color, lwd = ellipse.lwd, deg = FALSE)
+)
+text(lab.x, lab.y, "Control", cex = labsize)
 
+with(nmds_agg[node == 41 & pollution == 15],
+    plot(nmds1, nmds2, col = color, pch = 16, cex = 2, xlim = xl, ylim = yl, xlab = "", ylab = "")
+)
+with(ell_data[node == 41 & pollution == 15 & pollution_status != "Unpolluted"],
+    draw.ellipse(x = nmds1, y = nmds2, a = a, b = b, angle = angle, border = color, lwd = ellipse.lwd, deg = FALSE)
+)
+text(lab.x, lab.y, "Polluted", cex = labsize)
+legend("bottomleft", pch = 16, col = c(col_npol, col_pol, col_d1, col_d2),
+    legend = c("Unpolluted", "Pollluted", "Diluted-1", "Diluted-2"), cex = 2, bty = 'n')
+
+mtext("NMDS 1", side = 1, outer = TRUE, cex = 3)
+mtext("NMDS 2", side = 2, outer = TRUE, cex = 3)
+
+dev.off()
